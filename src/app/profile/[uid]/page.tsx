@@ -98,8 +98,9 @@ const UserProfilePage = () => {
             ))}
 
             {userPlaylists.length === 0 && (
-              <div className="col-span-full py-10 text-center text-text-muted bg-white/5 rounded-xl border border-white/5">
-                <p>No public playlists found.</p>
+              <div className="col-span-full py-20 text-center bg-card/20 rounded-xl border border-white/5">
+                <Music size={40} className="mx-auto mb-2 opacity-20" />
+                <p className="text-text-muted">No public playlists found</p>
               </div>
             )}
           </div>

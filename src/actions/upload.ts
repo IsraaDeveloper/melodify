@@ -11,6 +11,12 @@ export async function uploadFile(formData: FormData) {
     const file = formData.get("file") as File;
     if (!file) throw new Error("No file provided");
 
+    // Server-side size validation (20MB)
+    const MAX_SIZE = 20 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      throw new Error("File size exceeds 20MB limit");
+    }
+
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 

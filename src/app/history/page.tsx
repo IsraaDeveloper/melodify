@@ -8,15 +8,22 @@ import { useRouter } from "next/navigation";
 import { ref, onValue } from "firebase/database";
 import { db } from "@/lib/firebase";
 import { Song } from "@/types";
-import { History, Music, Play, Pause, Clock } from "lucide-react";
+import { History, Music, Play, Pause, Clock, Plus, X, Heart } from "lucide-react";
 import { usePlayer } from "@/context/PlayerContext";
 import { cn } from "@/lib/utils";
+import { Playlist } from "@/types";
+import { set } from "firebase/database";
+import toast from "react-hot-toast";
 
 const HistoryPage = () => {
-  const { profile, loading: authLoading } = useAuth();
+  const { profile, loading: authLoading, toggleLike } = useAuth();
   const router = useRouter();
   const [historySongs, setHistorySongs] = useState<(Song & { playedAt: number })[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userPlaylists, setUserPlaylists] = useState<Playlist[]>([]);
+  const [showPlaylistModal, setShowPlaylistModal] = useState(false);
+  const [selectedSongId, setSelectedSongId] = useState<string | null>(null);
+
   const { currentSong, isPlaying, playSong, togglePlay } = usePlayer();
 
   useEffect(() => {
@@ -28,6 +35,7 @@ const HistoryPage = () => {
     if (profile) {
       const historyRef = ref(db, `users/${profile.uid}/history`);
       const songsRef = ref(db, "songs");
+      const playlistsRef = ref(db, "playlists");
 
       onValue(songsRef, (songsSnapshot) => {
         const allSongs = songsSnapshot.val();
@@ -48,11 +56,18 @@ const HistoryPage = () => {
             } else {
               setHistorySongs([]);
             }
-            setLoading(false);
           });
-        } else {
-          setLoading(false);
         }
+      });
+
+      // Fetch Playlists
+      onValue(playlistsRef, (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+          const allPlaylists = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+          setUserPlaylists(allPlaylists.filter(p => p.ownerId === profile.uid));
+        }
+        setLoading(false);
       });
     }
   }, [profile, authLoading, router]);
@@ -62,6 +77,17 @@ const HistoryPage = () => {
       togglePlay();
     } else {
       playSong(song);
+    }
+  };
+
+  const addToPlaylist = async (playlistId: string) => {
+    if (!selectedSongId) return;
+    try {
+      await set(ref(db, `playlists/${playlistId}/songs/${selectedSongId}`), true);
+      toast.success("Added to playlist");
+      setShowPlaylistModal(false);
+    } catch (error) {
+      toast.error("Failed to add to playlist");
     }
   };
 
@@ -92,7 +118,7 @@ const HistoryPage = () => {
             <span>#</span>
             <span>Title</span>
             <span>Played At</span>
-            <div className="flex justify-end pr-1">
+            <div className="flex justify-end pr-4">
               <Clock size={16} />
             </div>
           </div>
@@ -124,8 +150,33 @@ const HistoryPage = () => {
                   {new Date(song.playedAt).toLocaleString()}
                 </span>
 
-                <div className="text-xs text-text-muted px-2">
-                  {song.playCount || 0} plays
+                <div className="flex items-center gap-x-4 px-2 justify-end">
+                  <span className="text-[10px] text-text-muted hidden sm:block">{song.playCount || 0} plays</span>
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedSongId(song.id);
+                      setShowPlaylistModal(true);
+                    }}
+                    className="p-1 text-text-muted hover:text-white transition opacity-0 group-hover:opacity-100"
+                    title="Add to playlist"
+                  >
+                    <Plus size={18} />
+                  </button>
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleLike(song.id);
+                    }}
+                    className="hover:scale-110 transition active:scale-90"
+                  >
+                    <Heart 
+                      size={18} 
+                      className={cn(
+                        profile?.likedSongs?.[song.id] ? "text-primary fill-primary" : "text-text-muted hover:text-white"
+                      )} 
+                    />
+                  </button>
                 </div>
               </div>
             ))}
@@ -139,7 +190,42 @@ const HistoryPage = () => {
           </div>
         </div>
       </div>
-      <div className="h-20" />
+
+      {/* Playlist Modal */}
+      {showPlaylistModal && (
+        <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-card w-full max-w-md rounded-xl p-6 border border-white/10 shadow-2xl animate-in fade-in zoom-in duration-200">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold">Add to Playlist</h3>
+              <button onClick={() => setShowPlaylistModal(false)} className="text-text-muted hover:text-white">
+                <X size={24} />
+              </button>
+            </div>
+            <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar pr-2">
+              {userPlaylists.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-text-muted mb-4">You don&apos;t have any playlists yet.</p>
+                </div>
+              ) : (
+                userPlaylists.map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => addToPlaylist(p.id)}
+                    className="w-full flex items-center gap-x-3 p-3 rounded-lg hover:bg-white/10 transition text-left group"
+                  >
+                    <div className="w-10 h-10 bg-neutral-800 rounded flex items-center justify-center flex-shrink-0 group-hover:bg-neutral-700 transition">
+                      {p.iconUrl ? <img src={p.iconUrl} alt="" className="w-full h-full object-cover rounded" /> : <Music size={20} className="text-text-muted" />}
+                    </div>
+                    <span className="font-medium truncate">{p.name}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="h-32" />
     </MainLayout>
   );
 };

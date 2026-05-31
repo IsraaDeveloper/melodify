@@ -64,6 +64,13 @@ const UploadPage = () => {
       return;
     }
 
+    // Max 20MB check
+    const MAX_SIZE = 20 * 1024 * 1024;
+    if (musicFile.size > MAX_SIZE) {
+      toast.error("Ukuran file musik tidak boleh lebih dari 20MB!");
+      return;
+    }
+
     setUploading(true);
     const toastId = toast.loading("Uploading music and cover...");
 
